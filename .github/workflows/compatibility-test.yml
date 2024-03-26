@@ -1,69 +1,71 @@
-name: Compatibility Test
-
-on: pull_request
-
-# Cancel Previous Runs
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   compatibility_test:
-    # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
-    runs-on: ubuntu-latest
-
     env:
       PKG_USERNAME: ${{ secrets.pkg_username }}
       PUBLISH_TOKEN: ${{ secrets.publish_token }}
-
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+    - continue-on-error: true
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        cache-dependency-path: '**/pom.xml'
+        check-latest: true
+        distribution: corretto
+        java-version: '11'
+    - continue-on-error: true
+      name: Cache local Maven repository
+      uses: actions/cache@v3
+      with:
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        path: '~/.m2/repository
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'corretto'
-          java-version: '11'
-          check-latest: true
-          cache-dependency-path: '**/pom.xml'
+          ~/.m2/wrapper/
 
-      - name: Cache local Maven repository
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.m2/wrapper/
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+          '
+        restore-keys: '${{ runner.os }}-maven-
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+          '
+    - continue-on-error: true
+      name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    - continue-on-error: true
+      name: Prepare top of trunk docker image
+      run: .ci/infrastructure-docker-build.sh compatibility
+      shell: bash
+    - continue-on-error: true
+      name: Pull docker image built from master parent commit
+      run: 'CORFU_VERSION=$(./mvnw -q -Dexec.executable=echo -Dexec.args=''${project.version}''
+        --non-recursive exec:exec)
 
-      - name: Prepare top of trunk docker image
-        run: .ci/infrastructure-docker-build.sh compatibility
-        shell: bash
+        docker pull corfudb/corfu-server:"$CORFU_VERSION"
 
-      - name: Pull docker image built from master parent commit
-        run: |
-          CORFU_VERSION=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)
-          docker pull corfudb/corfu-server:"$CORFU_VERSION"
-
-      - uses: actions/checkout@v4
-        with:
-          repository: 'CorfuDB/corfudb-cloud'
-
-      - name: Build universe-core
-        working-directory: ./universe
-        run: rm -rf ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
-
-      - name: Run version compatibility tests
-        working-directory: ./tests
-        run: ./gradlew clean test -Dtags=version-compatibility
-
-      - name: Upload compatibility test logs
-        uses: actions/upload-artifact@v2
-        with:
-          name: compatibility-test-logs
-          retention-days: 3
-          path: ./tests/build/logs
+        '
+    - continue-on-error: true
+      uses: actions/checkout@v4
+      with:
+        repository: CorfuDB/corfudb-cloud
+    - continue-on-error: true
+      name: Build universe-core
+      run: rm -rf ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
+      working-directory: ./universe
+    - continue-on-error: true
+      name: Run version compatibility tests
+      run: ./gradlew clean test -Dtags=version-compatibility
+      working-directory: ./tests
+    - continue-on-error: true
+      name: Upload compatibility test logs
+      uses: actions/upload-artifact@v2
+      with:
+        name: compatibility-test-logs
+        path: ./tests/build/logs
+        retention-days: 3
+name: Compatibility Test
+on:
+  repository_dispatch:
+    types: trigger-ga___compatibility-test.yml

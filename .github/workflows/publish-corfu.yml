@@ -1,57 +1,56 @@
-name: CorfuDB Artifacts
-
-on:
-  push:
-    branches:
-      - master
-
-# Cancel Previous Runs
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   publish_corfu_db_artifacts:
-
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-
     env:
+      DOCKER_PASSWORD: ${{ secrets.docker_password }}
+      DOCKER_USERNAME: ${{ secrets.docker_username }}
       PKG_USERNAME: ${{ secrets.pkg_username }}
       PUBLISH_TOKEN: ${{ secrets.publish_token }}
-      DOCKER_USERNAME: ${{ secrets.docker_username }}
-      DOCKER_PASSWORD: ${{ secrets.docker_password }}
-
+    if: github.event_name == 'push'
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+    - continue-on-error: true
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        cache-dependency-path: '**/pom.xml'
+        check-latest: true
+        distribution: corretto
+        java-version: '11'
+    - continue-on-error: true
+      name: Cache local Maven repository
+      uses: actions/cache@v3
+      with:
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        path: '~/.m2/repository
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'corretto'
-          java-version: '11'
-          check-latest: true
-          cache-dependency-path: '**/pom.xml'
+          ~/.m2/wrapper/
 
-      - name: Cache local Maven repository
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.m2/wrapper/
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+          '
+        restore-keys: '${{ runner.os }}-maven-
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+          '
+    - continue-on-error: true
+      name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    - continue-on-error: true
+      name: Prepare Corfu
+      run: '.ci/infrastructure-docker-build.sh docker
 
-      - name: Prepare Corfu
-        run: |
-          .ci/infrastructure-docker-build.sh docker
-          .ci/generator-docker-build.sh
-        shell: bash
+        .ci/generator-docker-build.sh
 
-      - name: Publish corfu artifacts
-        working-directory: ./
-        run: ./mvnw clean deploy -s ./.mvn/settings.xml -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
+        '
+      shell: bash
+    - continue-on-error: true
+      name: Publish corfu artifacts
+      run: ./mvnw clean deploy -s ./.mvn/settings.xml -DskipTests -Dmaven.javadoc.skip=true
+        -Dcheckstyle.skip -T 1C
+      working-directory: ./
+name: CorfuDB Artifacts
+on:
+  repository_dispatch:
+    types: trigger-ga___publish-corfu.yml

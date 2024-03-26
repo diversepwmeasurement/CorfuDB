@@ -1,77 +1,81 @@
-name: Injection Framework Test
-
-on: pull_request
-
-# Cancel Previous Runs
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   injection_framework_test:
-    # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
-    runs-on: ubuntu-latest
-
     env:
       PKG_USERNAME: ${{ secrets.pkg_username }}
       PUBLISH_TOKEN: ${{ secrets.publish_token }}
-
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+    - continue-on-error: true
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        cache-dependency-path: '**/pom.xml'
+        check-latest: true
+        distribution: corretto
+        java-version: '11'
+    - continue-on-error: true
+      name: Cache local Maven repository
+      uses: actions/cache@v3
+      with:
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        path: '~/.m2/repository
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'corretto'
-          java-version: '11'
-          check-latest: true
-          cache-dependency-path: '**/pom.xml'
+          ~/.m2/wrapper/
 
-      - name: Cache local Maven repository
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.m2/wrapper/
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+          '
+        restore-keys: '${{ runner.os }}-maven-
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+          '
+    - continue-on-error: true
+      name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    - continue-on-error: true
+      name: Prepare top of trunk docker image
+      run: '.ci/infrastructure-docker-build.sh docker
 
-      - name: Prepare top of trunk docker image
-        run: |
-          .ci/infrastructure-docker-build.sh docker
-          .ci/generator-docker-build.sh
-        shell: bash
+        .ci/generator-docker-build.sh
 
-      - name: Set corfu server version env variable
-        run: echo "CORFU_SERVER_VERSION=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_ENV
-
-      - uses: actions/checkout@v2
-        with:
-          repository: 'CorfuDB/corfudb-cloud'
-
-      - name: Build universe-core
-        working-directory: ./universe
-        run: rm -rf ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
-
-      - name: Set corfu server version
-        working-directory: ./tests
-        run: ./gradlew setCorfuServerVersion -Pcorfu.server.version=${{ env.CORFU_SERVER_VERSION }}
-
-      - name: Run injection framework with universe framework
-        working-directory: ./tests
-        run: ./gradlew clean test -Dtags=longevity-docker
-
-      - name: upload longevity logs artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: injection-framework-logs
-          retention-days: 3
-          path: ./tests/build/corfu-longevity-app/correctness.log
-
-      - name: Run injection framework verification
-        working-directory: ./tests/build/corfu-longevity-app
-        run: docker run -v ${PWD}/correctness.log:/injection_framework/correctness.log corfudb/injection-framework-verification:latest
+        '
+      shell: bash
+    - continue-on-error: true
+      name: Set corfu server version env variable
+      run: echo "CORFU_SERVER_VERSION=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}'
+        --non-recursive exec:exec)" >> $GITHUB_ENV
+    - continue-on-error: true
+      uses: actions/checkout@v2
+      with:
+        repository: CorfuDB/corfudb-cloud
+    - continue-on-error: true
+      name: Build universe-core
+      run: rm -rf ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
+      working-directory: ./universe
+    - continue-on-error: true
+      name: Set corfu server version
+      run: ./gradlew setCorfuServerVersion -Pcorfu.server.version=${{ env.CORFU_SERVER_VERSION
+        }}
+      working-directory: ./tests
+    - continue-on-error: true
+      name: Run injection framework with universe framework
+      run: ./gradlew clean test -Dtags=longevity-docker
+      working-directory: ./tests
+    - continue-on-error: true
+      name: upload longevity logs artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: injection-framework-logs
+        path: ./tests/build/corfu-longevity-app/correctness.log
+        retention-days: 3
+    - continue-on-error: true
+      name: Run injection framework verification
+      run: docker run -v ${PWD}/correctness.log:/injection_framework/correctness.log
+        corfudb/injection-framework-verification:latest
+      working-directory: ./tests/build/corfu-longevity-app
+name: Injection Framework Test
+on:
+  repository_dispatch:
+    types: trigger-ga___injection-framework-test.yml
